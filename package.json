@@ -2,8 +2,10 @@
   "devDependencies": {
     "@types/glob": "^7.2.0",
     "@types/jest": "^28.1.1",
+    "@types/jquery": "^2.0.60",
     "glob": "^8.0.3",
     "ts-jest": "^28.0.4",
+    "ts-morph": "^15.1.0",
     "ts-node": "^10.8.1"
   },
   "scripts": {
