@@ -18,7 +18,7 @@ class BracketMigration implements IMigration {
     }
 
     private getFiles(): string[] {
-        const originalPath = join(__dirname, "../../src/**/*.ts");
+        const originalPath = join(__dirname, "../../src/brackets/**/*.ts");
         const globPath = originalPath.replace(/\\/g, "/");
 
         return glob.sync(globPath);
