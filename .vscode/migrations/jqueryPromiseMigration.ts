@@ -1,32 +1,28 @@
-import { join, resolve } from "path";
-import { Block, CallExpression, Expression, FunctionDeclaration, Project, PropertyAccessExpression, SourceFile, SyntaxKind } from "ts-morph";
+import { resolve } from "path";
+import { Block, CallExpression, Expression, FunctionDeclaration, Identifier, NullLiteral, Project, ProjectOptions, PropertyAccessExpression, SourceFile, SyntaxKind } from "ts-morph";
 import { IMigration, Match, MatchedFile } from "./migrationTypes";
+
+type FailureCallback = FunctionDeclaration | NullLiteral;
 
 @Migration({
     name: "JQuery Promises"
 })
 export class JQueryPromiseMigration implements IMigration {
-    private workspacePath = resolve(__dirname, "../..");
-    private tsConfigPath: string = join(this.workspacePath, "tsconfig.json");
-    private readonly project: Project;
-
-    public constructor() {
-        this.project = new Project({
-            tsConfigFilePath: this.tsConfigPath,
-            compilerOptions: {
-                sourceMap: false,
-                inlineSourceMap: false
-            }
-        });
-    }
-
-    public getMatchedFiles(): MatchedFile[] | Promise<MatchedFile[]> {
-        return this.project.getSourceFiles().map(file => {
-            return {
+    public getMatchedFiles(): MatchedFile[] {
+        const project = new Project(this.projectOptions);
+        return project.getSourceFiles()
+            .filter(file => file.getFilePath().includes("/src/jqueryPromise/"))
+            .filter(file => !file.getFilePath().includes("/src/jqueryPromise/test/"))
+            .map(file => ({
                 path: file.getFilePath(),
                 matches: this.getMatchesOf(file)
-            };
-        });
+            }));
+    }
+
+    private get projectOptions(): ProjectOptions {
+        return {
+            tsConfigFilePath: resolve(__dirname, "../../tsconfig.json")
+        };
     }
 
     private getMatchesOf(sourceFile: SourceFile): Match[] {
@@ -35,43 +31,62 @@ export class JQueryPromiseMigration implements IMigration {
             .map((r, index) => this.getMatchFrom(r, index));
     }
 
-    private getMatchFrom(returnExpression: Expression, index: number): Match {
-        const originalContent = returnExpression.getSourceFile().getText();
-        const modifiedContent = originalContent.slice(0, returnExpression.getStart())
-            + `$.Deferred().reject(${returnExpression?.getText()})`
-            + originalContent.slice(returnExpression.getEnd());
+    private getMatchFrom(expression: Expression, index: number): Match {
+        const original = expression.getSourceFile().getText();
+        const returnValue = expression.getText();
+        const firstLine = returnValue.split("\r\n")[0];
 
         return {
-            label: `(${index + 1}) ${returnExpression?.getText().split("\r\n")[0]}`,
-            modifiedContent
-        };
+            label: `(${index + 1}) ${firstLine}`,
+            modifiedContent:
+                original.slice(0, expression.getStart())
+                + "$.Deferred().reject(" + returnValue + ")"
+                + original.slice(expression.getEnd())
+        } as Match;
     }
 
     private findAffectedReturns(sourceFile: SourceFile): Expression[] {
-        return sourceFile.getDescendantsOfKind(SyntaxKind.CallExpression)
-            .flatMap(descendant => this.getFailureReturnsOf(descendant))
+        const thenCalls = this.getThenCallsIn(sourceFile);
+        const failureCallbacks = this.getFailureCbsOf(thenCalls);
+        return this.getReturnValuesOf(failureCallbacks)
             .filter(isNonPromise);
     }
 
-    private getFailureReturnsOf(callExpr: CallExpression): Expression[] {
-        if (!isThenCall(callExpr)) return [];
+    private getThenCallsIn(sourceFile: SourceFile): CallExpression[] {
+        return sourceFile
+            .getDescendantsOfKind(SyntaxKind.CallExpression)
+            .filter(isThenCall)
+    }
 
-        const failCallback: FunctionDeclaration = callExpr.getArguments()[1] as FunctionDeclaration;
-        if (!failCallback) return [];
-        if (!failCallback.getBody) return [];
+    private getFailureCbsOf(callExpressions: CallExpression[]): FailureCallback[] {
+        return callExpressions.map(callExpression => {
+            const failureCallback = callExpression.getArguments()[1];
 
-        const body = failCallback.getBody();
-        if (!body) return [];
+            if (Identifier.isIdentifier(failureCallback)) {
+                const name = failureCallback.getText();
+                const lineNumber = failureCallback.getStartLineNumber();
+                const filePath = failureCallback.getSourceFile().getFilePath();
+                throw new Error(`Identifiers as failure callbacks are not supported. Found one called ${name} at line ${lineNumber} in ${filePath}`);
+            }
 
-        if (Block.isBlock(body)) {
-            return body.getChildrenOfKind(SyntaxKind.ReturnStatement)
-                .map(statement => statement.getExpression())
-                .filter(expression => !!expression);
-        } else if (Expression.isExpression(body)) {
-            return [body];
-        } else {
-            throw new Error(`Unsupported fail callback type ${body.getKindName()}.`);
-        }
+            return failureCallback as FailureCallback;
+        });
+    }
+
+    private getReturnValuesOf(failureCallbacks: FailureCallback[]): Expression[] {
+        return failureCallbacks
+            .flatMap(failureCallback => {
+                if (NullLiteral.isNullLiteral(failureCallback)) return [];
+
+                const body = failureCallback.getBody();
+                if (Expression.isExpression(body)) return [body];
+                if (!Block.isBlock(body)) throw new Error(`Unsupported fail callback type ${body.getKindName()}.`);
+
+                return body
+                    .getChildrenOfKind(SyntaxKind.ReturnStatement)
+                    .map(statement => statement.getExpression())
+                    .filter(expression => !!expression);
+            });
     }
 }
 
@@ -80,8 +95,10 @@ function isNonPromise(expression: Expression): boolean {
 }
 
 function isPromise(expression: Expression): boolean {
-    const returnType = expression.getType().getText();
-    return returnType?.startsWith("JQueryPromise") || returnType?.startsWith("JQueryDeferred") || false;
+    const returnType = expression.getType();
+    const typeName = returnType.getText();
+    return typeName.startsWith("JQueryPromise")
+        || typeName.startsWith("JQueryDeferred");
 }
 
 function isThenCall(callExpr: CallExpression): boolean {
