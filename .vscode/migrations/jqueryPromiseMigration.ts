@@ -1,4 +1,5 @@
-import { resolve } from "path";
+import * as jest from "jest";
+import { join, resolve } from "path";
 import { Block, CallExpression, Expression, FunctionDeclaration, Identifier, NullLiteral, Project, ProjectOptions, PropertyAccessExpression, SourceFile, SyntaxKind } from "ts-morph";
 import { IMigration, Match, MatchedFile } from "./migrationTypes";
 
@@ -87,6 +88,16 @@ export class JQueryPromiseMigration implements IMigration {
                     .map(statement => statement.getExpression())
                     .filter(expression => !!expression);
             });
+    }
+
+    public async verify(): Promise<void> {
+        const result = await jest.runCLI({} as any, [join(__dirname, "../..")]);
+        debugger;
+        if (result.results.numFailedTests > 0
+            || result.results.numFailedTestSuites > 0
+            || result.results.numRuntimeErrorTestSuites > 0) {
+            throw new Error("Tests failed");
+        }
     }
 }
 
