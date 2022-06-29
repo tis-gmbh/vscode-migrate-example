@@ -33,7 +33,7 @@ export class JQueryPromiseMigration implements IMigration {
     }
 
     private getMatchFrom(expression: Expression, index: number): Match {
-        const original = expression.getSourceFile().getText();
+        const original = expression.getSourceFile().getFullText();
         const returnValue = expression.getText();
         const firstLine = returnValue.split("\r\n")[0];
 
