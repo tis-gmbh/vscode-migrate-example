@@ -5,6 +5,15 @@ import { IMigration, Match, MatchedFile } from "./migrationTypes";
 
 type FailureCallback = FunctionDeclaration | NullLiteral;
 
+
+/**
+ * Warning: This migration is a simplified example and should not be
+ * used in this form for production code, as it is incomplete.
+ * For the sake of readibility, the following scenarios are not
+ * supported:
+ * - `failFilter` that is not defined inline, but referenced
+ * - `failFilter` that returns nothing (implicit return)
+ */
 @Migration({
     name: "JQuery Promises"
 })
