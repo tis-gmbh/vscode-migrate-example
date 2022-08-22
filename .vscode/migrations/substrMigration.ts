@@ -29,6 +29,15 @@ export class SubstrMigration implements IMigration {
             .map(migrate)
     }
 
+
+    public async verify(): Promise<void> {
+        const result = await jest.runCLI({} as any, [join(__dirname, "../..")]);
+        if (result.results.numFailedTests > 0
+            || result.results.numFailedTestSuites > 0
+            || result.results.numRuntimeErrorTestSuites > 0) {
+            throw new Error("Tests failed");
+        }
+    }
 }
 
 function isSubstrCall(call: CallExpression): boolean {
