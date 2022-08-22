@@ -10,7 +10,6 @@ export class SubstrMigration implements IMigration {
         const project = new Project(this.projectOptions);
         return project.getSourceFiles()
             .filter(file => file.getFilePath().includes("/src/substr/"))
-            .filter(file => !file.getFilePath().includes("/src/substr/test/"))
             .map(file => ({
                 path: file.getFilePath(),
                 matches: this.getMatchesOf(file)
