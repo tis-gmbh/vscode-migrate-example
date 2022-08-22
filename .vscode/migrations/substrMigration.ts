@@ -1,5 +1,5 @@
 import { resolve } from "path";
-import { CallExpression, NumericLiteral, Project, ProjectOptions, SourceFile, SyntaxKind } from "ts-morph";
+import { CallExpression, Node, NumericLiteral, Project, ProjectOptions, SourceFile, SyntaxKind } from "ts-morph";
 import { IMigration, Match, MatchedFile } from "./migrationTypes";
 
 @Migration({
@@ -41,27 +41,33 @@ function isSubstrCall(call: CallExpression): boolean {
 }
 
 function migrate(call: CallExpression): Match {
-    let startArg = call.getArguments()[0];
-    let lengthArg = call.getArguments()[1];
-    let modifiedContent = call.getSourceFile().getFullText();
-    const substrNode = call.getExpressionIfKindOrThrow(SyntaxKind.PropertyAccessExpression).getNameNode();
+    const startArg = call.getArguments()[0];
+    const lengthArg = call.getArguments()[1];
+    const originalContent = call.getSourceFile().getFullText();
+    const prefix = originalContent.substring(0, call.getStart());
+    const suffix = originalContent.substring(call.getEnd());
+    const propertyAccessNode = call.getExpressionIfKindOrThrow(SyntaxKind.PropertyAccessExpression);
+    const propertyName = propertyAccessNode.getExpression().getText();
+    const newArgs = getNewArgs(startArg, lengthArg);
 
-    let endArg = "";
-    if (lengthArg) {
-        if (NumericLiteral.isNumericLiteral(startArg)
-            && NumericLiteral.isNumericLiteral(lengthArg)) {
-            endArg = (startArg.getLiteralValue() + lengthArg.getLiteralValue()) + "";
-        } else {
-            endArg = startArg.getText() + " + " + lengthArg.getText();
-        }
-    }
-
-    const prefix = modifiedContent.substring(0, substrNode.getStart());
-    const suffix = modifiedContent.substring(call.getEnd());
-    modifiedContent = `${prefix}substring(${startArg.getText()}, ${endArg || ""})${suffix}`;
+    const modifiedContent = `${prefix}${propertyName}.substring(${newArgs})${suffix}`;
 
     return {
         label: `Start: ${startArg.getText()}; Length: ${lengthArg?.getText()}`,
         modifiedContent
     }
+}
+
+function getNewArgs(startArg: Node, lengthArg: Node | undefined): string {
+    let newArgs = startArg.getText();
+    if (lengthArg) {
+        newArgs += ", ";
+        if (NumericLiteral.isNumericLiteral(startArg)
+            && NumericLiteral.isNumericLiteral(lengthArg)) {
+            newArgs += (startArg.getLiteralValue() + lengthArg.getLiteralValue()) + "";
+        } else {
+            newArgs += startArg.getText() + " + " + lengthArg.getText();
+        }
+    }
+    return newArgs;
 }
