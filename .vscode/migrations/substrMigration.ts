@@ -1,4 +1,5 @@
-import { resolve } from "path";
+import * as jest from "jest";
+import { join, resolve } from "path";
 import { CallExpression, Node, NumericLiteral, Project, ProjectOptions, SourceFile, SyntaxKind } from "ts-morph";
 import { IMigration, Match, MatchedFile } from "./migrationTypes";
 
